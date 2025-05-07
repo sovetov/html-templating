@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Recursive Walk with Replacement, Class, and Loop</title>
+</head>
+<body>
+  <div>
+    <x-text key="message"></x-text>
+    <x-class key="highlight"></x-class>
+    <x-for key="items">
+      <p>Item: <span class="item-content"></span></p>
+    </x-for>
+  </div>
+  <x-custom-element>Custom Element 1</x-custom-element>
+  <p>A regular paragraph.</p>
+  <x-another>Custom Element 2</x-another>
+  <div>
+    <x-nested>Nested Custom Element</x-nested>
+    <x-class key="container"></x-class>
+  </div>
+  <script>
+    const t = (el, data) => {
+      for (const child of [...el.children]) {
+        const tag = child.tagName.toLowerCase();
+        if (tag === 'x-text') {
+          const key = child.getAttribute('key');
+          if (key && Object.prototype.hasOwnProperty.call(data, key)) {
+            const textNode = document.createTextNode(data[key]);
+            el.replaceChild(textNode, child);
+          } else {
+            // If key is missing or not in data, do nothing.
+          }
+        } else if (tag === 'x-class') {
+          const key = child.getAttribute('key');
+          if (key && Object.prototype.hasOwnProperty.call(data, key)) {
+            el.classList.add(data[key]);
+          }
+          el.removeChild(child);
+        } else if (tag === 'x-for') {
+          const key = child.getAttribute('key');
+          if (key && Object.prototype.hasOwnProperty.call(data, key) && Array.isArray(data[key])) {
+            data[key].forEach(item => {
+              const clone = child.cloneNode(true);
+              t(clone, item);
+              el.insertBefore(clone, child);
+            });
+          }
+          el.removeChild(child);
+        } else {
+          t(child, data);
+        }
+      }
+    };
+    t(document.documentElement, {
+      message: "Hello, this is replaced text!",
+      highlight: "red-highlight",
+      container: "main-container",
+      items: [
+        { "item-content": "First Item" },
+        { "item-content": "Second Item" },
+        { "item-content": "Third Item" }
+      ]
+    });
+  </script>
+</body>
+</html>

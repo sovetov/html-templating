@@ -1,67 +1,141 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Recursive Walk with Replacement, Class, and Loop</title>
+    <meta charset="UTF-8">
+    <title>Test:</title>
+    <style>
+        .good {
+            background: #cfc;
+        }
+
+        .bad {
+            background: #fcc;
+        }
+    </style>
+    <script>
+        function render(template, userData) {
+            if (Array.isArray(userData)) {
+                const fragment = document.createDocumentFragment();
+                userData.forEach((item) => {
+                    fragment.append(render(template, item));
+                })
+                return fragment;
+            } else {
+                const clone = template.content.cloneNode(true);
+                clone.querySelectorAll('slot').forEach((slot) => {
+                    // <template> is necessary.
+                    // It keeps its contents in a separate fragment and does not add contents to DOM.
+                    // <script> within <template> are not executed during initial HTML parsing.
+                    // They are executed when cloned and inserted into DOM.
+                    const nested = slot.querySelector('template');
+                    if (!slot.name) {
+                        slot.replaceWith(nested ? render(nested, {}) : createErrorNode(null));
+                    } else if (!(slot.name in userData)) {
+                        slot.replaceWith(nested ? render(nested, {}) : createErrorNode(slot.name));
+                    } else {
+                        const datum = userData[slot.name];
+                        slot.replaceWith(nested ? render(nested, datum) : document.createTextNode(datum));
+                    }
+                })
+                return clone;
+            }
+        }
+
+        function createErrorNode(key) {
+            let node = document.createElement('input');
+            node.value = key || '???';
+            node.disabled = true;
+            node.style.width = (node.value.length + 0.5) + 'ch';
+            node.style.border = '1px dashed black';
+            node.style.background = 'none';
+            node.style.textAlign = 'center';
+            node.style.font = 'inherit';
+            return node;
+        }
+
+        customElements.define('parent-href', class extends HTMLElement {
+            connectedCallback() {
+                let parent = this.parentElement;
+                let href = this.textContent.trim();
+                if (href) {
+                    if (parent.nodeName !== 'A') {
+                        const link = document.createElement('a');
+                        link.append(...parent.childNodes);
+                        parent.append(link);
+                        parent = link;
+                    }
+                    parent.href = href;
+                }
+                this.remove();
+            }
+        });
+        customElements.define('parent-class', class extends HTMLElement {
+            connectedCallback() {
+                let cssClass = this.textContent.trim();
+                if (cssClass) {
+                    this.parentElement.classList.add(cssClass);
+                }
+                this.remove();
+            }
+        });
+    </script>
 </head>
 <body>
-  <div>
-    <x-text key="message"></x-text>
-    <x-class key="highlight"></x-class>
-    <x-for key="items">
-      <p>Item: <span class="item-content"></span></p>
-    </x-for>
-  </div>
-  <x-custom-element>Custom Element 1</x-custom-element>
-  <p>A regular paragraph.</p>
-  <x-another>Custom Element 2</x-another>
-  <div>
-    <x-nested>Nested Custom Element</x-nested>
-    <x-class key="container"></x-class>
-  </div>
-  <script>
-    const t = (el, data) => {
-      for (const child of [...el.children]) {
-        const tag = child.tagName.toLowerCase();
-        if (tag === 'x-text') {
-          const key = child.getAttribute('key');
-          if (key && Object.prototype.hasOwnProperty.call(data, key)) {
-            const textNode = document.createTextNode(data[key]);
-            el.replaceChild(textNode, child);
-          } else {
-            // If key is missing or not in data, do nothing.
-          }
-        } else if (tag === 'x-class') {
-          const key = child.getAttribute('key');
-          if (key && Object.prototype.hasOwnProperty.call(data, key)) {
-            el.classList.add(data[key]);
-          }
-          el.removeChild(child);
-        } else if (tag === 'x-for') {
-          const key = child.getAttribute('key');
-          if (key && Object.prototype.hasOwnProperty.call(data, key) && Array.isArray(data[key])) {
-            data[key].forEach(item => {
-              const clone = child.cloneNode(true);
-              t(clone, item);
-              el.insertBefore(clone, child);
-            });
-          }
-          el.removeChild(child);
-        } else {
-          t(child, data);
-        }
-      }
-    };
-    t(document.documentElement, {
-      message: "Hello, this is replaced text!",
-      highlight: "red-highlight",
-      container: "main-container",
-      items: [
-        { "item-content": "First Item" },
-        { "item-content": "Second Item" },
-        { "item-content": "Third Item" }
-      ]
-    });
-  </script>
+<h1>Inline</h1>
+<template>
+    <h2>
+        <slot name="message"></slot>
+    </h2>
+    <ul>
+        <slot name="items">
+            <template>
+                <li>
+                    <span>
+                        <slot name="caption"></slot>
+                        <parent-class>
+                            <slot name="class"></slot>
+                        </parent-class>
+                        <parent-href>
+                            <slot name="url"></slot>
+                        </parent-href>
+                        <slot></slot>
+                    </span>
+                    <ul>
+                        <slot name="subs">
+                            <template>
+                                <li>
+                                    <strong>
+                                        <slot name="qwe"></slot>
+                                    </strong>
+                                    <slot name="asd"></slot>
+                                    <script>
+                                        document.querySelector('h1').textContent += '+';
+                                    </script>
+                                </li>
+                            </template>
+                        </slot>
+                    </ul>
+                </li>
+            </template>
+        </slot>
+    </ul>
+</template>
+<script>
+    let template = document.currentScript.previousElementSibling;
+    template.replaceWith(render(template, {
+        message: "Hello, this is replaced text!",
+        items: [
+            {"caption": "First Item", "class": "good"},
+            {"caption": "Second Item", "class": "bad"},
+            {"caption": "4th Item"},
+            {"class": "bad"},
+            {"caption": "Third Item", "class": "good", "subs": [{"qwe": 124, "asd": 457}, {"qwe": 123, "asd": 456}]},
+            {"caption": "Third Item", "class": "good", "subs": {"qwe": 125, "asd": 458}},
+            {"caption": "com", "class": "good", "url": "https://example.com/"},
+            {"caption": "org", "class": "good", "url": "https://example.org/"},
+            {"caption": "org", "class": "good", "url": null},
+        ]
+    }));
+</script>
 </body>
 </html>

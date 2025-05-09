@@ -13,31 +13,37 @@
         }
     </style>
     <script>
-        function render(template, userData) {
-            if (Array.isArray(userData)) {
+        function render(template, data) {
+            // <template> is necessary.
+            // It keeps its contents in a separate fragment and does not add contents to DOM.
+            // <script> within <template> are not executed during initial HTML parsing.
+            // They are executed when cloned and inserted into DOM.
+            const value = template.dataset.key !== undefined ? data[template.dataset.key] : data;
+            if (value === undefined) {
+                return createErrorNode(template.dataset.key);
+            } else if (value === null) {
+                return document.createDocumentFragment();
+            } else if (Object.getPrototypeOf(value) === Object.getPrototypeOf({})) {
+                const clone = template.content.cloneNode();
+                for (const node of clone.querySelectorAll('[name]')) {
+                    const key = node.getAttribute('name');
+                    if (key in value) {
+                        node.setAttribute('value', value[key]);
+                    }
+                }
+                return clone;
+            } else if (Object.getPrototypeOf(value) === Object.getPrototypeOf([])) {
                 const fragment = document.createDocumentFragment();
-                userData.forEach((item) => {
-                    fragment.append(render(template, item));
-                })
+                for (let item of value) {
+                    const clone = template.content.cloneNode(true);
+                    for (const nested of clone.querySelectorAll('template')) {
+                        nested.before(render(nested, item));
+                    }
+                    fragment.append(clone);
+                }
                 return fragment;
             } else {
-                const clone = template.content.cloneNode(true);
-                clone.querySelectorAll('slot').forEach((slot) => {
-                    // <template> is necessary.
-                    // It keeps its contents in a separate fragment and does not add contents to DOM.
-                    // <script> within <template> are not executed during initial HTML parsing.
-                    // They are executed when cloned and inserted into DOM.
-                    const nested = slot.querySelector('template');
-                    if (!slot.name) {
-                        slot.replaceWith(nested ? render(nested, {}) : createErrorNode(null));
-                    } else if (!(slot.name in userData)) {
-                        slot.replaceWith(nested ? render(nested, {}) : createErrorNode(slot.name));
-                    } else {
-                        const datum = userData[slot.name];
-                        slot.replaceWith(nested ? render(nested, datum) : document.createTextNode(datum));
-                    }
-                })
-                return clone;
+                return document.createTextNode(value.toString());
             }
         }
 
@@ -46,7 +52,9 @@
             node.value = key || '???';
             node.disabled = true;
             node.style.width = (node.value.length + 0.5) + 'ch';
-            node.style.border = '1px dashed black';
+            node.style.padding = 0;
+            node.style.outline = '1px dashed black';
+            node.style.border = 0;
             node.style.background = 'none';
             node.style.textAlign = 'center';
             node.style.font = 'inherit';
@@ -55,16 +63,9 @@
 
         customElements.define('parent-href', class extends HTMLElement {
             connectedCallback() {
-                let parent = this.parentElement;
                 let href = this.textContent.trim();
-                if (href) {
-                    if (parent.nodeName !== 'A') {
-                        const link = document.createElement('a');
-                        link.append(...parent.childNodes);
-                        parent.append(link);
-                        parent = link;
-                    }
-                    parent.href = href;
+                if (href && this.parentElement.nodeName === 'A') {
+                    this.parentElement.href = href;
                 }
                 this.remove();
             }
@@ -87,42 +88,38 @@
         <slot name="message"></slot>
     </h2>
     <ul>
-        <slot name="items">
-            <template>
-                <li>
-                    <span>
-                        <slot name="caption"></slot>
-                        <parent-class>
-                            <slot name="class"></slot>
-                        </parent-class>
-                        <parent-href>
-                            <slot name="url"></slot>
-                        </parent-href>
-                        <slot></slot>
-                    </span>
-                    <ul>
-                        <slot name="subs">
-                            <template>
-                                <li>
-                                    <strong>
-                                        <slot name="qwe"></slot>
-                                    </strong>
-                                    <slot name="asd"></slot>
-                                    <script>
-                                        document.querySelector('h1').textContent += '+';
-                                    </script>
-                                </li>
-                            </template>
-                        </slot>
-                    </ul>
-                </li>
-            </template>
-        </slot>
+        <template data-key="items">
+            <li>
+                <a>
+                    <template data-key="caption"></template>
+                    <parent-class>
+                        <template data-key="class"></template>
+                    </parent-class>
+                    <parent-href>
+                        <template data-key="url"></template>
+                    </parent-href>
+                    <template></template>
+                </a>
+                <ul>
+                    <template data-key="subs">
+                        <li>
+                            <strong>
+                                <template data-key="qwe"></template>
+                            </strong>
+                            <template data-key="asd"></template>
+                            <script>
+                                document.querySelector('h1').textContent += '+';
+                            </script>
+                        </li>
+                    </template>
+                </ul>
+            </li>
+        </template>
     </ul>
 </template>
 <script>
     let template = document.currentScript.previousElementSibling;
-    template.replaceWith(render(template, {
+    template.before(render(template, [{
         message: "Hello, this is replaced text!",
         items: [
             {"caption": "First Item", "class": "good"},
@@ -135,7 +132,7 @@
             {"caption": "org", "class": "good", "url": "https://example.org/"},
             {"caption": "org", "class": "good", "url": null},
         ]
-    }));
+    }]));
 </script>
 </body>
 </html>
